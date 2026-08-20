@@ -2,303 +2,290 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Interactive Sacred Pooja</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Sacred Pooja Simulator</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #120006;
-      color: #ffe6a7;
+      background: #0d0205;
+      color: #ffd000;
       font-family: 'Georgia', serif;
+      overflow: hidden;
+      height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      overflow: hidden;
     }
-    #game-container {
-      position: relative;
-      border: 3px solid #ffb703;
-      box-shadow: 0 0 35px rgba(255, 183, 3, 0.4);
-      border-radius: 12px;
-      overflow: hidden;
-      background: #2b000a;
+    #canvas-container {
+      width: 100vw;
+      height: 100vh;
+      position: absolute;
+      top: 0;
+      left: 0;
     }
-    canvas { display: block; cursor: pointer; }
-    .instructions {
-      margin-top: 10px;
+    #ui-container {
+      position: absolute;
+      bottom: 20px;
+      display: flex;
+      gap: 15px;
+      background: rgba(40, 0, 10, 0.85);
+      padding: 12px 25px;
+      border: 2px solid #ffb703;
+      border-radius: 50px;
+      box-shadow: 0 0 25px rgba(255, 183, 3, 0.4);
+      z-index: 10;
+    }
+    .pooja-btn {
+      background: #4a0011;
+      border: 1px solid #ffb703;
+      color: #ffe6a7;
+      padding: 10px 16px;
+      border-radius: 20px;
       font-size: 14px;
-      color: #ffb703;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .pooja-btn:hover {
+      background: #ffb703;
+      color: #2b000a;
+      transform: translateY(-2px);
+    }
+    #banner {
+      position: absolute;
+      top: 20px;
+      background: rgba(20, 0, 5, 0.9);
+      border: 2px solid #ffb703;
+      padding: 10px 25px;
+      border-radius: 8px;
+      font-size: 18px;
+      font-weight: bold;
       text-align: center;
+      z-index: 10;
+      box-shadow: 0 0 15px rgba(255, 183, 3, 0.3);
     }
   </style>
+  <!-- Load Three.js library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
-<div id="game-container">
-  <canvas id="canvas" width="550" height="680"></canvas>
+<div id="banner">✨ 3D Interactive Pooja Simulator ✨</div>
+<div id="canvas-container"></div>
+
+<div id="ui-container">
+  <button class="pooja-btn" onclick="offerPasupu()">🟡 Pasupu</button>
+  <button class="pooja-btn" onclick="offerKumkum()">🔴 Kumkum</button>
+  <button class="pooja-btn" onclick="offerFlowers()">🌸 Flowers</button>
+  <button class="pooja-btn" onclick="lightAgarbathi()">🪔 Agarbathi</button>
+  <button class="pooja-btn" onclick="offerCoconut()">🥥 Coconut</button>
 </div>
-<div class="instructions">Click or drag items from the thali at the bottom to perform the pooja</div>
 
 <script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
+// --- THREE.JS SCENE SETUP ---
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d0205);
+scene.fog = new THREE.FogExp2(0x0d0205, 0.03);
 
-// Game States
-let activeItem = null;
-let flowers = [];
-let pasupuMarks = [];
-let kumkumMarks = [];
-let isAgarbathiLit = false;
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 3, 8);
+camera.lookAt(0, 2, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+container.appendChild(renderer.domElement);
+
+// --- LIGHTING ---
+const ambientLight = new THREE.AmbientLight(0xffecd1, 0.6);
+scene.add(ambientLight);
+
+const warmPointLight = new THREE.PointLight(0xffa500, 2, 10);
+warmPointLight.position.set(0, 3, 2);
+warmPointLight.castShadow = true;
+scene.add(warmPointLight);
+
+// --- 3D ENVIRONMENT & ALTAR ---
+// Altar Base
+const altarGeo = new THREE.CylinderGeometry(2.5, 2.8, 0.6, 32);
+const altarMat = new THREE.MeshStandardMaterial({ color: 0x4a0a18, roughness: 0.4, metalness: 0.2 });
+const altar = new THREE.Mesh(altarGeo, altarMat);
+altar.position.y = 0.3;
+altar.receiveShadow = true;
+scene.add(altar);
+
+// Pedestal for Idol
+const pedestalGeo = new THREE.BoxGeometry(1.2, 0.4, 1.2);
+const pedestalMat = new THREE.MeshStandardMaterial({ color: 0xffb703, metalness: 0.8, roughness: 0.2 });
+const pedestal = new THREE.Mesh(pedestalGeo, pedestalMat);
+pedestal.position.set(0, 0.8, 0);
+pedestal.castShadow = true;
+scene.add(pedestal);
+
+// --- 3D IDOL (Ganesha Stylized Mesh) ---
+const idolGroup = new THREE.Group();
+
+const goldMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9, roughness: 0.2 });
+
+// Body
+const body = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 16), goldMat);
+body.position.y = 1.4;
+idolGroup.add(body);
+
+// Head
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 16), goldMat);
+head.position.y = 2.1;
+idolGroup.add(head);
+
+// Trunk
+const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.03, 0.5, 16), goldMat);
+trunk.position.set(0, 1.9, 0.3);
+trunk.rotation.x = Math.PI / 4;
+idolGroup.add(trunk);
+
+// Crown (Mukut)
+const crown = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.5, 16), goldMat);
+crown.position.y = 2.6;
+idolGroup.add(crown);
+
+scene.add(idolGroup);
+
+// Aura Glow Ring
+const auraGeo = new THREE.RingGeometry(0.6, 1.2, 32);
+const auraMat = new THREE.MeshBasicMaterial({ color: 0xffd700, side: THREE.DoubleSide, transparent: true, opacity: 0.4 });
+const aura = new THREE.Mesh(auraGeo, auraMat);
+aura.position.set(0, 2.1, -0.1);
+scene.add(aura);
+
+// --- OFFERING ACTIONS ---
 let smokeParticles = [];
-let isCoconutOffered = false;
-let poojaComplete = false;
+let agarbathiLit = false;
 
-// Tool Items on the Pooja Thali
-const tools = [
-  { id: 'pasupu', name: 'Pasupu', icon: '🟡', x: 70, y: 610, radius: 28, color: '#ffd000' },
-  { id: 'kumkum', name: 'Kumkum', icon: '🔴', x: 160, y: 610, radius: 28, color: '#d90429' },
-  { id: 'flowers', name: 'Flowers', icon: '🌸', x: 250, y: 610, radius: 28, color: '#ff70a6' },
-  { id: 'agarbathi', name: 'Agarbathi', icon: '🪔', x: 340, y: 610, radius: 28, color: '#ffb703' },
-  { id: 'coconut', name: 'Coconut', icon: '🥥', x: 430, y: 610, radius: 28, color: '#9c6644' }
-];
+// 1. Pasupu (Turmeric Mark)
+function offerPasupu() {
+  const mark = new THREE.Mesh(
+    new THREE.SphereGeometry(0.04, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0xffd700 })
+  );
+  mark.position.set(0, 2.2, 0.35);
+  scene.add(mark);
+}
 
-// Interaction Handlers
-let isDragging = false;
-let mouseX = 0, mouseY = 0;
+// 2. Kumkum (Vermilion Mark)
+function offerKumkum() {
+  const mark = new THREE.Mesh(
+    new THREE.SphereGeometry(0.03, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0xd90429 })
+  );
+  mark.position.set(0, 2.23, 0.37);
+  scene.add(mark);
+}
 
-canvas.addEventListener('mousedown', handleStart);
-canvas.addEventListener('mousemove', handleMove);
-canvas.addEventListener('mouseup', handleEnd);
+// 3. Flowers
+function offerFlowers() {
+  const colors = [0xff70a6, 0xffb703, 0xffffff];
+  for (let i = 0; i < 6; i++) {
+    const flower = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(0.08),
+      new THREE.MeshStandardMaterial({ color: colors[Math.floor(Math.random() * colors.length)] })
+    );
+    flower.position.set(
+      (Math.random() - 0.5) * 1.5,
+      0.65,
+      (Math.random() - 0.5) * 1.2 + 0.3
+    );
+    scene.add(flower);
+  }
+}
 
-canvas.addEventListener('touchstart', (e) => handleStart(e.touches[0]));
-canvas.addEventListener('touchmove', (e) => handleMove(e.touches[0]));
-canvas.addEventListener('touchend', handleEnd);
+// 4. Agarbathi (Incense & Smoke System)
+function lightAgarbathi() {
+  if (agarbathiLit) return;
+  agarbathiLit = true;
 
-function handleStart(e) {
-  const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
+  // Stand and Stick
+  const stick = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.01, 0.01, 0.6),
+    new THREE.MeshBasicMaterial({ color: 0x5c4033 })
+  );
+  stick.position.set(0.8, 0.8, 0.5);
+  scene.add(stick);
 
-  tools.forEach(tool => {
-    const dist = Math.hypot(x - tool.x, y - tool.y);
-    if (dist < tool.radius) {
-      activeItem = tool.id;
-      isDragging = true;
+  const tip = new THREE.Mesh(
+    new THREE.SphereGeometry(0.02),
+    new THREE.MeshBasicMaterial({ color: 0xff3300 })
+  );
+  tip.position.set(0.8, 1.1, 0.5);
+  scene.add(tip);
+}
+
+// 5. Coconut
+function offerCoconut() {
+  const mat = new THREE.MeshStandardMaterial({ color: 0x6b4226, roughness: 0.9 });
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+
+  // Two halves
+  const half1 = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2), mat);
+  half1.position.set(-0.6, 0.65, 0.6);
+  half1.rotation.x = Math.PI;
+
+  const inner1 = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2), whiteMat);
+  inner1.position.set(-0.6, 0.66, 0.6);
+  inner1.rotation.x = Math.PI;
+
+  scene.add(half1);
+  scene.add(inner1);
+}
+
+// --- ANIMATION LOOP ---
+let clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const time = clock.getElapsedTime();
+
+  // Gentle Idol Breathing Motion
+  idolGroup.position.y = Math.sin(time * 2) * 0.02;
+  aura.rotation.z = time * 0.2;
+
+  // Agarbathi Smoke Generation
+  if (agarbathiLit && Math.random() < 0.4) {
+    const p = new THREE.Mesh(
+      new THREE.SphereGeometry(0.02 + Math.random() * 0.02),
+      new THREE.MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.4 })
+    );
+    p.position.set(0.8 + (Math.random() - 0.5) * 0.05, 1.1, 0.5);
+    scene.add(p);
+    smokeParticles.push(p);
+  }
+
+  // Animate Smoke Particles
+  for (let i = smokeParticles.length - 1; i >= 0; i--) {
+    const p = smokeParticles[i];
+    p.position.y += 0.012;
+    p.position.x += Math.sin(time * 3 + i) * 0.003;
+    p.material.opacity -= 0.004;
+
+    if (p.material.opacity <= 0) {
+      scene.remove(p);
+      smokeParticles.splice(i, 1);
     }
-  });
-}
-
-function handleMove(e) {
-  const rect = canvas.getBoundingClientRect();
-  mouseX = e.clientX - rect.left;
-  mouseY = e.clientY - rect.top;
-}
-
-function handleEnd() {
-  if (isDragging && activeItem) {
-    applyOffering(mouseX, mouseY);
-  }
-  isDragging = false;
-  activeItem = null;
-}
-
-function applyOffering(x, y) {
-  // Target Area: Near God Idol (Center Canvas)
-  if (y < 500) {
-    if (activeItem === 'pasupu') {
-      pasupuMarks.push({ x, y, radius: 8 });
-    } else if (activeItem === 'kumkum') {
-      kumkumMarks.push({ x, y, radius: 6 });
-    } else if (activeItem === 'flowers') {
-      for (let i = 0; i < 5; i++) {
-        flowers.push({
-          x: x + (Math.random() * 40 - 20),
-          y: Math.min(480, y + (Math.random() * 30 - 15)),
-          type: Math.random() < 0.5 ? '🌸' : '🌼'
-        });
-      }
-    } else if (activeItem === 'agarbathi') {
-      isAgarbathiLit = true;
-    } else if (activeItem === 'coconut') {
-      isCoconutOffered = true;
-    }
-    checkCompletion();
-  }
-}
-
-function checkCompletion() {
-  if (pasupuMarks.length > 0 && kumkumMarks.length > 0 && flowers.length > 0 && isAgarbathiLit && isCoconutOffered) {
-    poojaComplete = true;
-  }
-}
-
-// Drawing Functions
-function drawBackground() {
-  // Sacred Arch / Mantap
-  ctx.fillStyle = '#4a0011';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Pillars
-  ctx.fillStyle = '#ffb703';
-  ctx.fillRect(30, 80, 25, 420);
-  ctx.fillRect(canvas.width - 55, 80, 25, 420);
-
-  // Top Arch
-  ctx.beginPath();
-  ctx.arc(canvas.width / 2, 90, 220, Math.PI, 0);
-  ctx.fillStyle = '#ffb703';
-  ctx.fill();
-
-  ctx.fillStyle = '#2b000a';
-  ctx.beginPath();
-  ctx.arc(canvas.width / 2, 90, 190, Math.PI, 0);
-  ctx.fill();
-}
-
-function drawIdol() {
-  ctx.save();
-  ctx.translate(canvas.width / 2, 260);
-
-  // Divine Aura Glow
-  let auraGlow = ctx.createRadialGradient(0, 0, 20, 0, 0, 150);
-  auraGlow.addColorStop(0, 'rgba(255, 215, 0, 0.6)');
-  auraGlow.addColorStop(1, 'rgba(255, 215, 0, 0)');
-  ctx.fillStyle = auraGlow;
-  ctx.beginPath();
-  ctx.arc(0, 0, 150, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Divine Idol (Ganesha Representation)
-  ctx.fillStyle = '#c97a2b'; // Brass/Stone finish
-
-  // Base Pedestal
-  ctx.fillRect(-70, 140, 140, 20);
-
-  // Body & Head
-  ctx.font = '120px serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('🐘', 0, 0);
-
-  ctx.restore();
-}
-
-function drawOfferings() {
-  // Render Pasupu
-  pasupuMarks.forEach(m => {
-    ctx.fillStyle = '#ffd000';
-    ctx.beginPath();
-    ctx.arc(m.x, m.y, m.radius, 0, Math.PI * 2);
-    ctx.fill();
-  });
-
-  // Render Kumkum
-  kumkumMarks.forEach(m => {
-    ctx.fillStyle = '#d90429';
-    ctx.beginPath();
-    ctx.arc(m.x, m.y, m.radius, 0, Math.PI * 2);
-    ctx.fill();
-  });
-
-  // Render Flowers
-  flowers.forEach(f => {
-    ctx.font = '24px serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(f.type, f.x, f.y);
-  });
-
-  // Render Agarbathi Smoke Effect
-  if (isAgarbathiLit) {
-    if (Math.random() < 0.6) {
-      smokeParticles.push({ x: 380, y: 440, vx: (Math.random() - 0.5) * 0.8, vy: -1.5, alpha: 0.6 });
-    }
-    
-    // Draw Agarbathi Stand
-    ctx.fillStyle = '#7f5539';
-    ctx.fillRect(375, 450, 10, 30);
-    ctx.fillStyle = '#d90429';
-    ctx.fillRect(379, 440, 2, 10); // Burning tip
   }
 
-  smokeParticles.forEach((p, index) => {
-    p.x += p.vx;
-    p.y += p.vy;
-    p.alpha -= 0.008;
-    ctx.fillStyle = `rgba(220, 220, 220, ${p.alpha})`;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, Math.random() * 4 + 2, 0, Math.PI * 2);
-    ctx.fill();
-
-    if (p.alpha <= 0) smokeParticles.splice(index, 1);
-  });
-
-  // Render Broken Coconut
-  if (isCoconutOffered) {
-    ctx.font = '32px serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('🥥', 180, 460);
-    ctx.fillText('🥥', 210, 460); // Two coconut halves
-  }
+  renderer.render(scene, camera);
 }
 
-function drawThaliUI() {
-  // Bottom Pooja Plate (Thali)
-  ctx.fillStyle = '#ffb703';
-  ctx.beginPath();
-  ctx.ellipse(canvas.width / 2, 610, 240, 50, 0, 0, Math.PI * 2);
-  ctx.fill();
+// Responsive Resizing
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
 
-  ctx.fillStyle = '#7a5200';
-  ctx.beginPath();
-  ctx.ellipse(canvas.width / 2, 610, 230, 42, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Draw Items on Thali
-  tools.forEach(tool => {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.beginPath();
-    ctx.arc(tool.x, tool.y, tool.radius, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.font = '28px serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(tool.icon, tool.x, tool.y);
-
-    ctx.fillStyle = '#ffb703';
-    ctx.font = '12px Georgia';
-    ctx.fillText(tool.name, tool.x, tool.y + 36);
-  });
-
-  // Dragging active item icon
-  if (isDragging && activeItem) {
-    const selected = tools.find(t => t.id === activeItem);
-    ctx.font = '36px serif';
-    ctx.fillText(selected.icon, mouseX, mouseY);
-  }
-
-  // Blessings Screen Banner
-  if (poojaComplete) {
-    ctx.fillStyle = 'rgba(18, 0, 6, 0.75)';
-    ctx.fillRect(0, 0, canvas.width, 70);
-
-    ctx.fillStyle = '#ffd000';
-    ctx.font = 'bold 20px Georgia';
-    ctx.textAlign = 'center';
-    ctx.fillText('✨ Pooja Complete! May God Bless You With Peace & Prosperity ✨', canvas.width / 2, 42);
-  }
-}
-
-function loop() {
-  drawBackground();
-  drawIdol();
-  drawOfferings();
-  drawThaliUI();
-  requestAnimationFrame(loop);
-}
-
-loop();
+animate();
 </script>
 </body>
 </html>
