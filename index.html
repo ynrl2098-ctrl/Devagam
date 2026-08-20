@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>The Spiritual Journey: Path to Enlightenment</title>
+  <title>Interactive Sacred Pooja</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #1a0c00;
-      color: #fff;
+      background: #120006;
+      color: #ffe6a7;
       font-family: 'Georgia', serif;
       display: flex;
       flex-direction: column;
@@ -19,314 +19,282 @@
     #game-container {
       position: relative;
       border: 3px solid #ffb703;
-      box-shadow: 0 0 30px rgba(255, 183, 3, 0.4);
-      border-radius: 8px;
+      box-shadow: 0 0 35px rgba(255, 183, 3, 0.4);
+      border-radius: 12px;
       overflow: hidden;
+      background: #2b000a;
     }
-    canvas { display: block; background: #2d1800; }
+    canvas { display: block; cursor: pointer; }
+    .instructions {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #ffb703;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
 
 <div id="game-container">
-  <canvas id="canvas" width="500" height="650"></canvas>
+  <canvas id="canvas" width="550" height="680"></canvas>
 </div>
+<div class="instructions">Click or drag items from the thali at the bottom to perform the pooja</div>
 
 <script>
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
-// --- Input Handling ---
-const keys = {};
-window.addEventListener('keydown', e => {
-  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) e.preventDefault();
-  keys[e.code] = true;
-  if (e.code === 'Space' && (gameState === 'START' || gameState === 'GAMEOVER' || gameState === 'WIN')) {
-    resetGame();
-    gameState = 'PLAYING';
-  }
-});
-window.addEventListener('keyup', e => keys[e.code] = false);
+// Game States
+let activeItem = null;
+let flowers = [];
+let pasupuMarks = [];
+let kumkumMarks = [];
+let isAgarbathiLit = false;
+let smokeParticles = [];
+let isCoconutOffered = false;
+let poojaComplete = false;
 
-// --- Game State & Variables ---
-let gameState = 'START'; // START, PLAYING, GAMEOVER, WIN
-let devotionScore = 0;
-let wisdomLevel = 1;
-let distanceToTemple = 1000;
-let spawnTimer = 0;
-
-// Inspirations / Verses on collecting wisdom
-const spiritualQuotes = [
-  "Peace comes from within.",
-  "Truth is one, paths are many.",
-  "Kindness is the highest prayer.",
-  "Purity of heart brings clarity.",
-  "Light conquers all darkness."
+// Tool Items on the Pooja Thali
+const tools = [
+  { id: 'pasupu', name: 'Pasupu', icon: '🟡', x: 70, y: 610, radius: 28, color: '#ffd000' },
+  { id: 'kumkum', name: 'Kumkum', icon: '🔴', x: 160, y: 610, radius: 28, color: '#d90429' },
+  { id: 'flowers', name: 'Flowers', icon: '🌸', x: 250, y: 610, radius: 28, color: '#ff70a6' },
+  { id: 'agarbathi', name: 'Agarbathi', icon: '🪔', x: 340, y: 610, radius: 28, color: '#ffb703' },
+  { id: 'coconut', name: 'Coconut', icon: '🥥', x: 430, y: 610, radius: 28, color: '#9c6644' }
 ];
-let currentQuote = "";
-let quoteTimer = 0;
 
-// --- Background Elements (Path & Trees) ---
-const stars = Array.from({ length: 40 }, () => ({
-  x: Math.random() * canvas.width,
-  y: Math.random() * canvas.height,
-  size: Math.random() * 2 + 1,
-  alpha: Math.random()
-}));
+// Interaction Handlers
+let isDragging = false;
+let mouseX = 0, mouseY = 0;
 
-class Seeker {
-  constructor() {
-    this.x = canvas.width / 2;
-    this.y = canvas.height - 80;
-    this.speed = 4.5;
-    this.radius = 16;
-  }
-  update() {
-    if (keys['ArrowLeft'] || keys['KeyA']) this.x -= this.speed;
-    if (keys['ArrowRight'] || keys['KeyD']) this.x += this.speed;
-    if (keys['ArrowUp'] || keys['KeyW']) this.y -= this.speed;
-    if (keys['ArrowDown'] || keys['KeyS']) this.y += this.speed;
+canvas.addEventListener('mousedown', handleStart);
+canvas.addEventListener('mousemove', handleMove);
+canvas.addEventListener('mouseup', handleEnd);
 
-    this.x = Math.max(80, Math.min(canvas.width - 80, this.x));
-    this.y = Math.max(100, Math.min(canvas.height - 40, this.y));
-  }
-  draw(ctx) {
-    ctx.save();
-    ctx.translate(this.x, this.y);
+canvas.addEventListener('touchstart', (e) => handleStart(e.touches[0]));
+canvas.addEventListener('touchmove', (e) => handleMove(e.touches[0]));
+canvas.addEventListener('touchend', handleEnd);
 
-    // Aura Glow
-    ctx.shadowColor = '#ffb703';
-    ctx.shadowBlur = 15;
+function handleStart(e) {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
 
-    // Robe / Seeker Representation (Lotus Pose / Robe Silhouette)
-    ctx.fillStyle = '#fb8500';
-    ctx.beginPath();
-    ctx.arc(0, -10, 10, 0, Math.PI * 2); // Head
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.moveTo(0, -2);
-    ctx.lineTo(-16, 16);
-    ctx.lineTo(16, 16);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.restore();
-  }
-}
-
-class Item {
-  constructor(type) {
-    this.x = Math.random() * (canvas.width - 200) + 100;
-    this.y = -20;
-    this.type = type; // 'lotus', 'diya', or 'distraction'
-    this.radius = 14;
-    this.speed = 2 + Math.random() * 1.5;
-    this.dead = false;
-  }
-  update() {
-    this.y += this.speed;
-    if (this.y > canvas.height + 30) this.dead = true;
-  }
-  draw(ctx) {
-    ctx.save();
-    ctx.translate(this.x, this.y);
-
-    if (this.type === 'lotus') {
-      ctx.shadowColor = '#ffb703'; ctx.shadowBlur = 10;
-      ctx.fillStyle = '#ff4d6d';
-      ctx.font = '22px serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('🪷', 0, 0);
-    } else if (this.type === 'diya') {
-      ctx.shadowColor = '#ffb703'; ctx.shadowBlur = 12;
-      ctx.fillStyle = '#ffb703';
-      ctx.font = '22px serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('🪔', 0, 0);
-    } else if (this.type === 'distraction') {
-      ctx.shadowColor = '#7209b7'; ctx.shadowBlur = 8;
-      ctx.fillStyle = '#4a4e69';
-      ctx.beginPath();
-      ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    ctx.restore();
-  }
-}
-
-let player = new Seeker();
-let items = [];
-
-function resetGame() {
-  player = new Seeker();
-  items = [];
-  devotionScore = 0;
-  wisdomLevel = 1;
-  distanceToTemple = 1000;
-  spawnTimer = 0;
-  currentQuote = "";
-  quoteTimer = 0;
-}
-
-function update() {
-  if (gameState !== 'PLAYING') return;
-
-  player.update();
-
-  // Progress distance to temple
-  distanceToTemple -= 0.8;
-  if (distanceToTemple <= 0) {
-    distanceToTemple = 0;
-    gameState = 'WIN';
-  }
-
-  // Item Spawning
-  spawnTimer++;
-  if (spawnTimer > 35) {
-    spawnTimer = 0;
-    const rand = Math.random();
-    if (rand < 0.45) items.push(new Item('lotus'));
-    else if (rand < 0.75) items.push(new Item('diya'));
-    else items.push(new Item('distraction'));
-  }
-
-  // Update Items & Check Collisions
-  items.forEach(item => {
-    item.update();
-
-    const dist = Math.hypot(player.x - item.x, player.y - item.y);
-    if (!item.dead && dist < player.radius + item.radius) {
-      item.dead = true;
-
-      if (item.type === 'lotus') {
-        devotionScore += 10;
-        currentQuote = spiritualQuotes[Math.floor(Math.random() * spiritualQuotes.length)];
-        quoteTimer = 120; // Show quote briefly
-      } else if (item.type === 'diya') {
-        devotionScore += 25;
-        wisdomLevel++;
-      } else if (item.type === 'distraction') {
-        devotionScore = Math.max(0, devotionScore - 15);
-        if (devotionScore === 0 && wisdomLevel > 1) {
-          wisdomLevel--;
-        }
-      }
+  tools.forEach(tool => {
+    const dist = Math.hypot(x - tool.x, y - tool.y);
+    if (dist < tool.radius) {
+      activeItem = tool.id;
+      isDragging = true;
     }
   });
-
-  items = items.filter(i => !i.dead);
-
-  if (quoteTimer > 0) quoteTimer--;
 }
 
+function handleMove(e) {
+  const rect = canvas.getBoundingClientRect();
+  mouseX = e.clientX - rect.left;
+  mouseY = e.clientY - rect.top;
+}
+
+function handleEnd() {
+  if (isDragging && activeItem) {
+    applyOffering(mouseX, mouseY);
+  }
+  isDragging = false;
+  activeItem = null;
+}
+
+function applyOffering(x, y) {
+  // Target Area: Near God Idol (Center Canvas)
+  if (y < 500) {
+    if (activeItem === 'pasupu') {
+      pasupuMarks.push({ x, y, radius: 8 });
+    } else if (activeItem === 'kumkum') {
+      kumkumMarks.push({ x, y, radius: 6 });
+    } else if (activeItem === 'flowers') {
+      for (let i = 0; i < 5; i++) {
+        flowers.push({
+          x: x + (Math.random() * 40 - 20),
+          y: Math.min(480, y + (Math.random() * 30 - 15)),
+          type: Math.random() < 0.5 ? '🌸' : '🌼'
+        });
+      }
+    } else if (activeItem === 'agarbathi') {
+      isAgarbathiLit = true;
+    } else if (activeItem === 'coconut') {
+      isCoconutOffered = true;
+    }
+    checkCompletion();
+  }
+}
+
+function checkCompletion() {
+  if (pasupuMarks.length > 0 && kumkumMarks.length > 0 && flowers.length > 0 && isAgarbathiLit && isCoconutOffered) {
+    poojaComplete = true;
+  }
+}
+
+// Drawing Functions
 function drawBackground() {
-  // Sacred Path Visual
-  ctx.fillStyle = '#120700';
+  // Sacred Arch / Mantap
+  ctx.fillStyle = '#4a0011';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Outer Trees/Forest
-  ctx.fillStyle = '#0a0300';
-  ctx.fillRect(0, 0, 70, canvas.height);
-  ctx.fillRect(canvas.width - 70, 0, 70, canvas.height);
+  // Pillars
+  ctx.fillStyle = '#ffb703';
+  ctx.fillRect(30, 80, 25, 420);
+  ctx.fillRect(canvas.width - 55, 80, 25, 420);
 
-  // Center Pilgrim Trail
-  ctx.fillStyle = '#2d1800';
+  // Top Arch
   ctx.beginPath();
-  ctx.moveTo(70, canvas.height);
-  ctx.lineTo(150, 0);
-  ctx.lineTo(canvas.width - 150, 0);
-  ctx.lineTo(canvas.width - 70, canvas.height);
+  ctx.arc(canvas.width / 2, 90, 220, Math.PI, 0);
+  ctx.fillStyle = '#ffb703';
   ctx.fill();
 
-  // Temple in distance growing closer
-  if (distanceToTemple < 300) {
-    let scale = (300 - distanceToTemple) / 300;
-    ctx.save();
-    ctx.translate(canvas.width / 2, 80);
-    ctx.scale(scale, scale);
-    ctx.fillStyle = '#ffb703';
-    ctx.shadowColor = '#ffb703';
-    ctx.shadowBlur = 20;
-    ctx.font = '60px serif';
+  ctx.fillStyle = '#2b000a';
+  ctx.beginPath();
+  ctx.arc(canvas.width / 2, 90, 190, Math.PI, 0);
+  ctx.fill();
+}
+
+function drawIdol() {
+  ctx.save();
+  ctx.translate(canvas.width / 2, 260);
+
+  // Divine Aura Glow
+  let auraGlow = ctx.createRadialGradient(0, 0, 20, 0, 0, 150);
+  auraGlow.addColorStop(0, 'rgba(255, 215, 0, 0.6)');
+  auraGlow.addColorStop(1, 'rgba(255, 215, 0, 0)');
+  ctx.fillStyle = auraGlow;
+  ctx.beginPath();
+  ctx.arc(0, 0, 150, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Divine Idol (Ganesha Representation)
+  ctx.fillStyle = '#c97a2b'; // Brass/Stone finish
+
+  // Base Pedestal
+  ctx.fillRect(-70, 140, 140, 20);
+
+  // Body & Head
+  ctx.font = '120px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('🐘', 0, 0);
+
+  ctx.restore();
+}
+
+function drawOfferings() {
+  // Render Pasupu
+  pasupuMarks.forEach(m => {
+    ctx.fillStyle = '#ffd000';
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, m.radius, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Render Kumkum
+  kumkumMarks.forEach(m => {
+    ctx.fillStyle = '#d90429';
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, m.radius, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Render Flowers
+  flowers.forEach(f => {
+    ctx.font = '24px serif';
     ctx.textAlign = 'center';
-    ctx.fillText('🛕', 0, 0);
-    ctx.restore();
+    ctx.fillText(f.type, f.x, f.y);
+  });
+
+  // Render Agarbathi Smoke Effect
+  if (isAgarbathiLit) {
+    if (Math.random() < 0.6) {
+      smokeParticles.push({ x: 380, y: 440, vx: (Math.random() - 0.5) * 0.8, vy: -1.5, alpha: 0.6 });
+    }
+    
+    // Draw Agarbathi Stand
+    ctx.fillStyle = '#7f5539';
+    ctx.fillRect(375, 450, 10, 30);
+    ctx.fillStyle = '#d90429';
+    ctx.fillRect(379, 440, 2, 10); // Burning tip
+  }
+
+  smokeParticles.forEach((p, index) => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.alpha -= 0.008;
+    ctx.fillStyle = `rgba(220, 220, 220, ${p.alpha})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, Math.random() * 4 + 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (p.alpha <= 0) smokeParticles.splice(index, 1);
+  });
+
+  // Render Broken Coconut
+  if (isCoconutOffered) {
+    ctx.font = '32px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🥥', 180, 460);
+    ctx.fillText('🥥', 210, 460); // Two coconut halves
   }
 }
 
-function drawUI() {
-  // Devotion & Distance Counters
+function drawThaliUI() {
+  // Bottom Pooja Plate (Thali)
   ctx.fillStyle = '#ffb703';
-  ctx.font = '16px Georgia';
-  ctx.textAlign = 'left';
-  ctx.fillText(`🪷 Devotion: ${devotionScore}`, 20, 30);
-  ctx.fillText(`✨ Wisdom Level: ${wisdomLevel}`, 20, 55);
+  ctx.beginPath();
+  ctx.ellipse(canvas.width / 2, 610, 240, 50, 0, 0, Math.PI * 2);
+  ctx.fill();
 
-  ctx.textAlign = 'right';
-  ctx.fillText(`Distance to Temple: ${Math.floor(distanceToTemple)}m`, canvas.width - 20, 30);
+  ctx.fillStyle = '#7a5200';
+  ctx.beginPath();
+  ctx.ellipse(canvas.width / 2, 610, 230, 42, 0, 0, Math.PI * 2);
+  ctx.fill();
 
-  // Inspirational Quote Display
-  if (quoteTimer > 0 && currentQuote) {
-    ctx.fillStyle = 'rgba(255, 183, 3, 0.9)';
-    ctx.font = 'italic 16px Georgia';
+  // Draw Items on Thali
+  tools.forEach(tool => {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.beginPath();
+    ctx.arc(tool.x, tool.y, tool.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.font = '28px serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`"${currentQuote}"`, canvas.width / 2, canvas.height - 20);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(tool.icon, tool.x, tool.y);
+
+    ctx.fillStyle = '#ffb703';
+    ctx.font = '12px Georgia';
+    ctx.fillText(tool.name, tool.x, tool.y + 36);
+  });
+
+  // Dragging active item icon
+  if (isDragging && activeItem) {
+    const selected = tools.find(t => t.id === activeItem);
+    ctx.font = '36px serif';
+    ctx.fillText(selected.icon, mouseX, mouseY);
   }
 
-  // Screens
-  if (gameState === 'START') {
-    ctx.fillStyle = 'rgba(18, 7, 0, 0.88)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Blessings Screen Banner
+  if (poojaComplete) {
+    ctx.fillStyle = 'rgba(18, 0, 6, 0.75)';
+    ctx.fillRect(0, 0, canvas.width, 70);
 
-    ctx.fillStyle = '#ffb703';
+    ctx.fillStyle = '#ffd000';
+    ctx.font = 'bold 20px Georgia';
     ctx.textAlign = 'center';
-    ctx.font = '24px Georgia';
-    ctx.fillText('THE SPIRITUAL JOURNEY', canvas.width / 2, 220);
-
-    ctx.font = '15px Georgia';
-    ctx.fillStyle = '#fff';
-    ctx.fillText('Walk the sacred path to the Holy Temple.', canvas.width / 2, 280);
-    ctx.fillText('🪷 Collect Lotuses for Devotion', canvas.width / 2, 320);
-    ctx.fillText('🪔 Light Diyas for Wisdom', canvas.width / 2, 350);
-    ctx.fillText('⚫ Avoid Dark Distractions', canvas.width / 2, 380);
-
-    ctx.fillStyle = '#ffb703';
-    ctx.fillText('Use Arrow Keys / WASD to Walk', canvas.width / 2, 440);
-    ctx.fillText('[ PRESS SPACE TO BEGIN ]', canvas.width / 2, 490);
-  } else if (gameState === 'WIN') {
-    ctx.fillStyle = 'rgba(18, 7, 0, 0.92)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.fillStyle = '#ffb703';
-    ctx.textAlign = 'center';
-    ctx.font = '26px Georgia';
-    ctx.fillText('🛕 JOURNEY COMPLETE 🛕', canvas.width / 2, 240);
-
-    ctx.font = '18px Georgia';
-    ctx.fillStyle = '#fff';
-    ctx.fillText('You have reached the Temple with a pure heart.', canvas.width / 2, 300);
-    ctx.fillText(`Final Devotion Points: ${devotionScore}`, canvas.width / 2, 340);
-
-    ctx.fillStyle = '#ffb703';
-    ctx.fillText('[ PRESS SPACE TO JOURNEY AGAIN ]', canvas.width / 2, 430);
+    ctx.fillText('✨ Pooja Complete! May God Bless You With Peace & Prosperity ✨', canvas.width / 2, 42);
   }
 }
 
 function loop() {
   drawBackground();
-  
-  if (gameState === 'PLAYING') {
-    player.draw(ctx);
-    items.forEach(item => item.draw(ctx));
-  }
-
-  update();
-  drawUI();
-
+  drawIdol();
+  drawOfferings();
+  drawThaliUI();
   requestAnimationFrame(loop);
 }
 
