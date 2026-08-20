@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>The Spiritual Journey: Path to Enlightenment</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #1a0c00;
+      color: #fff;
+      font-family: 'Georgia', serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    #game-container {
+      position: relative;
+      border: 3px solid #ffb703;
+      box-shadow: 0 0 30px rgba(255, 183, 3, 0.4);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    canvas { display: block; background: #2d1800; }
+  </style>
+</head>
+<body>
+
+<div id="game-container">
+  <canvas id="canvas" width="500" height="650"></canvas>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+// --- Input Handling ---
+const keys = {};
+window.addEventListener('keydown', e => {
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) e.preventDefault();
+  keys[e.code] = true;
+  if (e.code === 'Space' && (gameState === 'START' || gameState === 'GAMEOVER' || gameState === 'WIN')) {
+    resetGame();
+    gameState = 'PLAYING';
+  }
+});
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+// --- Game State & Variables ---
+let gameState = 'START'; // START, PLAYING, GAMEOVER, WIN
+let devotionScore = 0;
+let wisdomLevel = 1;
+let distanceToTemple = 1000;
+let spawnTimer = 0;
+
+// Inspirations / Verses on collecting wisdom
+const spiritualQuotes = [
+  "Peace comes from within.",
+  "Truth is one, paths are many.",
+  "Kindness is the highest prayer.",
+  "Purity of heart brings clarity.",
+  "Light conquers all darkness."
+];
+let currentQuote = "";
+let quoteTimer = 0;
+
+// --- Background Elements (Path & Trees) ---
+const stars = Array.from({ length: 40 }, () => ({
+  x: Math.random() * canvas.width,
+  y: Math.random() * canvas.height,
+  size: Math.random() * 2 + 1,
+  alpha: Math.random()
+}));
+
+class Seeker {
+  constructor() {
+    this.x = canvas.width / 2;
+    this.y = canvas.height - 80;
+    this.speed = 4.5;
+    this.radius = 16;
+  }
+  update() {
+    if (keys['ArrowLeft'] || keys['KeyA']) this.x -= this.speed;
+    if (keys['ArrowRight'] || keys['KeyD']) this.x += this.speed;
+    if (keys['ArrowUp'] || keys['KeyW']) this.y -= this.speed;
+    if (keys['ArrowDown'] || keys['KeyS']) this.y += this.speed;
+
+    this.x = Math.max(80, Math.min(canvas.width - 80, this.x));
+    this.y = Math.max(100, Math.min(canvas.height - 40, this.y));
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    // Aura Glow
+    ctx.shadowColor = '#ffb703';
+    ctx.shadowBlur = 15;
+
+    // Robe / Seeker Representation (Lotus Pose / Robe Silhouette)
+    ctx.fillStyle = '#fb8500';
+    ctx.beginPath();
+    ctx.arc(0, -10, 10, 0, Math.PI * 2); // Head
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(0, -2);
+    ctx.lineTo(-16, 16);
+    ctx.lineTo(16, 16);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+  }
+}
+
+class Item {
+  constructor(type) {
+    this.x = Math.random() * (canvas.width - 200) + 100;
+    this.y = -20;
+    this.type = type; // 'lotus', 'diya', or 'distraction'
+    this.radius = 14;
+    this.speed = 2 + Math.random() * 1.5;
+    this.dead = false;
+  }
+  update() {
+    this.y += this.speed;
+    if (this.y > canvas.height + 30) this.dead = true;
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    if (this.type === 'lotus') {
+      ctx.shadowColor = '#ffb703'; ctx.shadowBlur = 10;
+      ctx.fillStyle = '#ff4d6d';
+      ctx.font = '22px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🪷', 0, 0);
+    } else if (this.type === 'diya') {
+      ctx.shadowColor = '#ffb703'; ctx.shadowBlur = 12;
+      ctx.fillStyle = '#ffb703';
+      ctx.font = '22px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🪔', 0, 0);
+    } else if (this.type === 'distraction') {
+      ctx.shadowColor = '#7209b7'; ctx.shadowBlur = 8;
+      ctx.fillStyle = '#4a4e69';
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+}
+
+let player = new Seeker();
+let items = [];
+
+function resetGame() {
+  player = new Seeker();
+  items = [];
+  devotionScore = 0;
+  wisdomLevel = 1;
+  distanceToTemple = 1000;
+  spawnTimer = 0;
+  currentQuote = "";
+  quoteTimer = 0;
+}
+
+function update() {
+  if (gameState !== 'PLAYING') return;
+
+  player.update();
+
+  // Progress distance to temple
+  distanceToTemple -= 0.8;
+  if (distanceToTemple <= 0) {
+    distanceToTemple = 0;
+    gameState = 'WIN';
+  }
+
+  // Item Spawning
+  spawnTimer++;
+  if (spawnTimer > 35) {
+    spawnTimer = 0;
+    const rand = Math.random();
+    if (rand < 0.45) items.push(new Item('lotus'));
+    else if (rand < 0.75) items.push(new Item('diya'));
+    else items.push(new Item('distraction'));
+  }
+
+  // Update Items & Check Collisions
+  items.forEach(item => {
+    item.update();
+
+    const dist = Math.hypot(player.x - item.x, player.y - item.y);
+    if (!item.dead && dist < player.radius + item.radius) {
+      item.dead = true;
+
+      if (item.type === 'lotus') {
+        devotionScore += 10;
+        currentQuote = spiritualQuotes[Math.floor(Math.random() * spiritualQuotes.length)];
+        quoteTimer = 120; // Show quote briefly
+      } else if (item.type === 'diya') {
+        devotionScore += 25;
+        wisdomLevel++;
+      } else if (item.type === 'distraction') {
+        devotionScore = Math.max(0, devotionScore - 15);
+        if (devotionScore === 0 && wisdomLevel > 1) {
+          wisdomLevel--;
+        }
+      }
+    }
+  });
+
+  items = items.filter(i => !i.dead);
+
+  if (quoteTimer > 0) quoteTimer--;
+}
+
+function drawBackground() {
+  // Sacred Path Visual
+  ctx.fillStyle = '#120700';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Outer Trees/Forest
+  ctx.fillStyle = '#0a0300';
+  ctx.fillRect(0, 0, 70, canvas.height);
+  ctx.fillRect(canvas.width - 70, 0, 70, canvas.height);
+
+  // Center Pilgrim Trail
+  ctx.fillStyle = '#2d1800';
+  ctx.beginPath();
+  ctx.moveTo(70, canvas.height);
+  ctx.lineTo(150, 0);
+  ctx.lineTo(canvas.width - 150, 0);
+  ctx.lineTo(canvas.width - 70, canvas.height);
+  ctx.fill();
+
+  // Temple in distance growing closer
+  if (distanceToTemple < 300) {
+    let scale = (300 - distanceToTemple) / 300;
+    ctx.save();
+    ctx.translate(canvas.width / 2, 80);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = '#ffb703';
+    ctx.shadowColor = '#ffb703';
+    ctx.shadowBlur = 20;
+    ctx.font = '60px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🛕', 0, 0);
+    ctx.restore();
+  }
+}
+
+function drawUI() {
+  // Devotion & Distance Counters
+  ctx.fillStyle = '#ffb703';
+  ctx.font = '16px Georgia';
+  ctx.textAlign = 'left';
+  ctx.fillText(`🪷 Devotion: ${devotionScore}`, 20, 30);
+  ctx.fillText(`✨ Wisdom Level: ${wisdomLevel}`, 20, 55);
+
+  ctx.textAlign = 'right';
+  ctx.fillText(`Distance to Temple: ${Math.floor(distanceToTemple)}m`, canvas.width - 20, 30);
+
+  // Inspirational Quote Display
+  if (quoteTimer > 0 && currentQuote) {
+    ctx.fillStyle = 'rgba(255, 183, 3, 0.9)';
+    ctx.font = 'italic 16px Georgia';
+    ctx.textAlign = 'center';
+    ctx.fillText(`"${currentQuote}"`, canvas.width / 2, canvas.height - 20);
+  }
+
+  // Screens
+  if (gameState === 'START') {
+    ctx.fillStyle = 'rgba(18, 7, 0, 0.88)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#ffb703';
+    ctx.textAlign = 'center';
+    ctx.font = '24px Georgia';
+    ctx.fillText('THE SPIRITUAL JOURNEY', canvas.width / 2, 220);
+
+    ctx.font = '15px Georgia';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('Walk the sacred path to the Holy Temple.', canvas.width / 2, 280);
+    ctx.fillText('🪷 Collect Lotuses for Devotion', canvas.width / 2, 320);
+    ctx.fillText('🪔 Light Diyas for Wisdom', canvas.width / 2, 350);
+    ctx.fillText('⚫ Avoid Dark Distractions', canvas.width / 2, 380);
+
+    ctx.fillStyle = '#ffb703';
+    ctx.fillText('Use Arrow Keys / WASD to Walk', canvas.width / 2, 440);
+    ctx.fillText('[ PRESS SPACE TO BEGIN ]', canvas.width / 2, 490);
+  } else if (gameState === 'WIN') {
+    ctx.fillStyle = 'rgba(18, 7, 0, 0.92)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#ffb703';
+    ctx.textAlign = 'center';
+    ctx.font = '26px Georgia';
+    ctx.fillText('🛕 JOURNEY COMPLETE 🛕', canvas.width / 2, 240);
+
+    ctx.font = '18px Georgia';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('You have reached the Temple with a pure heart.', canvas.width / 2, 300);
+    ctx.fillText(`Final Devotion Points: ${devotionScore}`, canvas.width / 2, 340);
+
+    ctx.fillStyle = '#ffb703';
+    ctx.fillText('[ PRESS SPACE TO JOURNEY AGAIN ]', canvas.width / 2, 430);
+  }
+}
+
+function loop() {
+  drawBackground();
+  
+  if (gameState === 'PLAYING') {
+    player.draw(ctx);
+    items.forEach(item => item.draw(ctx));
+  }
+
+  update();
+  drawUI();
+
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+</html>
